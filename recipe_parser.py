@@ -153,7 +153,7 @@ for step in all_steps:
 #  for every step we have found, then figure out the ingredients, utensils, parameters, etc.
 
 # interprets questions and provides a tuple of current step number and answer
-def answer_question(curr_step, prompt, question):
+def answer_question(curr_step, prompt, question, last_answer):
   if prompt == "show me the ingredients list":
     all_ingredients = []
     for step in all_steps:
@@ -175,14 +175,19 @@ def answer_question(curr_step, prompt, question):
   elif prompt == "take me to the":
     digit_list = [x for x in re.findall("[0-9]*", question) if x != '']
     if len(digit_list) == 0:
-      return (curr_step, "") #exit returning no information, malformed question
+      return (curr_step, None) #exit returning no information, malformed question
     step_num = digit_list[0]
-    if int(step_num) < len(all_steps) and int(step_num) >= 0:
-      return (int(step_num), f"Here's step {int(step_num)}: {all_steps[int(step_num)].text}")
+    if int(step_num) < len(all_steps) and int(step_num) > 0:
+      return (int(step_num) - 1, f"Here's step {int(step_num)}: {all_steps[int(step_num) - 1].text}")
     return (curr_step, f"There isn't a {int(step_num)}th step in this recipe!")
 
+  elif prompt == "repeat please":
+    return (curr_step, last_answer)
+
+  else:
+      return (curr_step, None)
+
 """
-elif prompt == "repeat please":
 elif prompt == "how do i do that":
 elif prompt == "how do i":
 elif prompt == "what is a":
@@ -197,18 +202,26 @@ def chat_with_user():
     recipe_url = input("Hi, I'm Alex! Please enter a recipe url.") # most basic name ever 💀
     #Insert code that actually uses this url to fetch recipe text
     curr_step = 0
+    answer = ""
+    last_ans = "Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit."
+    prompt_in_Q = False
     while True:
-      question = input(f"Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.").lower()
-      if question not in chatbot_Qs:
-        print("Sorry, I didn't understand your question. Please try to reformulate it.")
+      question = input("Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.").lower()
       for q in chatbot_Qs:
         if q in question:
-          curr_step, answer = answer_question(curr_step, q, question)
-          print(answer)
+          curr_step, answer = answer_question(curr_step, q.lower(), question, last_ans)
+          if answer == None:
+            answer = "Sorry, I didn't understand your question. Please try to reformulate it."
+          prompt_in_Q = True
+          print(answer) 
           break
+      if not prompt_in_Q:
+        print("Sorry, I didn't understand your question. Please try to reformulate it.")
       if question == 'bye':
         print("Bye!")
         break
+      last_ans = answer
+      prompt_in_Q = False
 chat_with_user()
 
 ''' Original dependency parsing code below: '''
