@@ -26,7 +26,7 @@ chatbot_Qs = ["show me the ingredients list", "go back one step", "go to the nex
 
 # "To support question-answering, you need to annotate each step object with the following information:"
 class Step:
-    def __init__(self, text, actions=[], ingredients=[], misc=[]):
+    def __init__(self, text, actions=[], ingredients=[], misc={}):
         self.text = text  # full sentence for a given step
         self.actions = actions  # verbs
         self.ingredients = ingredients  # direct objects
@@ -98,7 +98,7 @@ def extract_items(parts_of_speech):
 
 # Do dependency parsing on each sentence. If any of the verbs are cooking verbs, then it is a valid step
 # and we store the step and dependency parsing results. Basically initializing every step
-def parse_sentences():
+def parse_sentences(sentences):
     for sentence in sentences:
         sentence = str(sentence).replace('\n', '').lower()
         sent_obj = nlp(sentence)
@@ -128,11 +128,29 @@ def parse_sentences():
                                                     "." not in str(x) and "#" not in str(x) and ";" not in str(
                                                         x) and "}" not in str(
                                                         x) and "{" not in str(x) and "@" not in str(x)]
-                new_step = Step(sentence, sentence_verbs)
+                    # extract the ingredients and utensils
+                    ingredients, utensils = extract_items(token_by_part_of_speech)
 
-                # extract the ingredients and utensils
-                new_step.ingredients, new_step.misc = extract_items(token_by_part_of_speech)
-                all_steps.append(new_step)
+                    misc_dict = {'utensils': utensils}
+
+                    # extract temperature
+                    temp_pattern = r'([+-]?\d+(\.\d+)*)\s?°([CcFf])'
+                    matches = re.findall(temp_pattern, sentence)
+                    if matches:
+                        first_match = matches[0]
+                        temp_str = first_match[0] + ' °' + first_match[2].upper()
+                        misc_dict['temperature'] = temp_str
+
+                    # extract time TODO doesn't entirely match a phrase like 15 to 20 minutes
+                    time_pattern = r'(\d+)(\s*)(second(s*)|minute(s*)|hour(s*))'
+                    matches = re.findall(time_pattern, sentence)
+                    if matches:
+                        first_match = matches[0]
+                        time_str = first_match[0] + ' ' + first_match[2]
+                        misc_dict['time'] = time_str
+
+                    new_step = Step(sentence, sentence_verbs, ingredients, misc_dict)
+                    all_steps.append(new_step)
 
 # extract recipe text from website given URL
 def get_recipe_from_url(url):
@@ -146,9 +164,12 @@ def get_recipe_from_url(url):
 def setup(url):
   recipe_doc = get_recipe_from_url(url)
   sentences = list(recipe_doc.sents)
-  parse_sentences()
+  parse_sentences(sentences)
   for step in all_steps: #this loop's just nice for debugging
     print(step)
+  print(f'Total number of steps: {len(all_steps)}')
+
+
 
 # TODO For question answering stuff:
 #  for every step we have found, then figure out the ingredients, utensils, parameters, etc.
@@ -163,9 +184,9 @@ def answer_question(curr_step, prompt, question, last_answer):
           all_ingredients.append(ingredient)
     return (curr_step, f"Here are all the ingredients: {all_ingredients}")
 
-  elif prompt == "go to the next step": 
+  elif prompt == "go to the next step":
     if curr_step < len(all_steps) - 1:
-      return (curr_step + 1, f"Here's the next step: {all_steps[curr_step + 1].text}") 
+      return (curr_step + 1, f"Here's the next step: {all_steps[curr_step + 1].text}")
     return (curr_step, "This is the final step!")
 
   elif prompt == "go back one step":
@@ -206,6 +227,20 @@ def answer_question(curr_step, prompt, question, last_answer):
       help_url_stem += "+" + word
     return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
 
+  elif prompt == "what temperature":
+      curr_step_obj = all_steps[curr_step]
+      if 'temperature' in curr_step_obj.misc:
+          return curr_step, f'The recipe recommends {curr_step_obj.misc["temperature"]}!'
+      else:
+          return curr_step, None
+
+  elif prompt == "how long do i":
+      curr_step_obj = all_steps[curr_step]
+      if 'time' in curr_step_obj.misc:
+          return curr_step, f'The recipe recommends {curr_step_obj.misc["time"]}!'
+      else:
+          return curr_step, None
+
   else:
       return (curr_step, None)
 
@@ -242,7 +277,7 @@ def chat_with_user():
           if answer == None:
             answer = "Sorry, I didn't understand your question. Please try to reformulate it."
           prompt_in_Q = True
-          print(answer) 
+          print(answer)
           break
       if not prompt_in_Q:
         print("Sorry, I didn't understand your question. Please try to reformulate it.")
