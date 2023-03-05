@@ -194,7 +194,7 @@ def answer_question(curr_step, prompt, question, last_answer):
             if len(step.ingredients) != 0:
                help_url_stem += "+" + str(step.ingredients[0])
             return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
-    return (curr_step, "We unfortunately could not find a reference for that step.")
+    return (curr_step, "I unfortunately could not find a reference for that step.")
 
   elif prompt == "how do i":
     help_url_stem = "https://www.youtube.com/results?search_query=how+to"
