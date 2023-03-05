@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup  # webscraper
 import requests  # html request maker
 import spacy
-
+import re
 """ From Lecture 12:
 - Parse this well enough to support useful navigation.
 - This means breaking “steps” as listed into individual actions or closely connected sets of actions.
@@ -10,19 +10,19 @@ import spacy
 - An array would be a good choice.
 - Each element in the array will be an (annotated) step object.
 - You need to be able to get from the step object, first: What is the text of that step?
-
 - To support question-answering, you need to annotate each step object with the following information:
     - The cooking action(s) of that step, which will be the verb(s).
     - The ingredient(s) of that step, which will be the direct object.
     - The tools, utensils, and other parameters (time, temperature), which will be indirect objects (objects of propositional phrases).
-
 - You will need these annotations to parameterize question-answering methods associated with queries.
 - It will probably make sense to have a simple type system — a semantic model — encompassing: cooking actions, ingredients, utensils, tools, parameters.
 - You will need a lexicon of words used in recipes corresponding to this simple semantic model.
 """
 
 all_steps = []  # "You need a data structure to support navigation forward and backward."
-
+chatbot_Qs = ["show me the ingredients list", "go back one step", "go to the next step", "repeat please", "take me to the",
+              "how do i do that", "how do i", "what is a", "how much of", "what temperature", "how long do i"
+              "when is it done", "what can i substitute for"] # All question prompts from assignment description
 
 # "To support question-answering, you need to annotate each step object with the following information:"
 class Step:
@@ -92,7 +92,6 @@ or maybe try to figure out how to typecheck nouns for ingredients or something l
 stop here for now. doing any of this other stuff seems pretty simple anyway.
 """
 
-
 # For a given step, find out ingredients and tools used for it
 def extract_items(parts_of_speech):
     ingredients = []
@@ -145,7 +144,6 @@ def parse_sentences():
                 new_step.ingredients, new_step.misc = extract_items(token_by_part_of_speech)
                 all_steps.append(new_step)
 
-
 parse_sentences()
 
 for step in all_steps:
@@ -154,8 +152,64 @@ for step in all_steps:
 # TODO For question answering stuff:
 #  for every step we have found, then figure out the ingredients, utensils, parameters, etc.
 
+# interprets questions and provides a tuple of current step number and answer
+def answer_question(curr_step, prompt, question):
+  if prompt == "show me the ingredients list":
+    all_ingredients = []
+    for step in all_steps:
+      for ingredient in step.ingredients:
+        if ingredient not in all_ingredients:
+          all_ingredients.append(ingredient)
+    return (curr_step, f"Here are all the ingredients: {all_ingredients}")
 
+  elif prompt == "go to the next step": 
+    if curr_step < len(all_steps) - 1:
+      return (curr_step + 1, f"Here's the next step: {all_steps[curr_step + 1].text}") 
+    return (curr_step, "This is the final step!")
 
+  elif prompt == "go back one step":
+    if curr_step > 0:
+      return (curr_step - 1, f"Here's the step before this one: {all_steps[curr_step - 1].text}")
+    return (curr_step, "This is the first step!")
+
+  elif prompt == "take me to the":
+    digit_list = [x for x in re.findall("[0-9]*", question) if x != '']
+    if len(digit_list) == 0:
+      return (curr_step, "") #exit returning no information, malformed question
+    step_num = digit_list[0]
+    if int(step_num) < len(all_steps) and int(step_num) >= 0:
+      return (int(step_num), f"Here's step {int(step_num)}: {all_steps[int(step_num)].text}")
+    return (curr_step, f"There isn't a {int(step_num)}th step in this recipe!")
+
+"""
+elif prompt == "repeat please":
+elif prompt == "how do i do that":
+elif prompt == "how do i":
+elif prompt == "what is a":
+elif prompt == "how much of":
+elif prompt == "what temperature":
+elif prompt == "how long do i":
+elif prompt == "when is it done":
+elif prompt == "what can i substitute for":
+"""
+# fields user questions and responds
+def chat_with_user():
+    recipe_url = input("Hi, I'm Alex! Please enter a recipe url.") # most basic name ever 💀
+    #Insert code that actually uses this url to fetch recipe text
+    curr_step = 0
+    while True:
+      question = input(f"Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.").lower()
+      if question not in chatbot_Qs:
+        print("Sorry, I didn't understand your question. Please try to reformulate it.")
+      for q in chatbot_Qs:
+        if q in question:
+          curr_step, answer = answer_question(curr_step, q, question)
+          print(answer)
+          break
+      if question == 'bye':
+        print("Bye!")
+        break
+chat_with_user()
 
 ''' Original dependency parsing code below: '''
 # token_by_part_of_speech = {}
