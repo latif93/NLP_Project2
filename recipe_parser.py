@@ -2,6 +2,7 @@ from bs4 import BeautifulSoup  # webscraper
 import requests  # html request maker
 import spacy
 import re
+
 """ From Lecture 12:
 - Parse this well enough to support useful navigation.
 - This means breaking “steps” as listed into individual actions or closely connected sets of actions.
@@ -20,9 +21,12 @@ import re
 """
 
 all_steps = []  # "You need a data structure to support navigation forward and backward."
-chatbot_Qs = ["show me the ingredients list", "go back one step", "go to the next step", "repeat please", "take me to the",
+chatbot_Qs = ["show me the ingredients list", "go back one step", "go to the next step", "repeat please",
+              "take me to the",
               "how do i do that", "how do i", "what is a", "how much of", "what temperature", "how long do i"
-              "when is it done", "what can i substitute for"] # All question prompts from assignment description
+                                                                                              "when is it done",
+              "what can i substitute for"]  # All question prompts from assignment description
+
 
 # "To support question-answering, you need to annotate each step object with the following information:"
 class Step:
@@ -82,6 +86,7 @@ or maybe try to figure out how to typecheck nouns for ingredients or something l
 stop here for now. doing any of this other stuff seems pretty simple anyway.
 """
 
+
 # For a given step, find out ingredients and tools used for it
 def extract_items(parts_of_speech):
     ingredients = []
@@ -128,164 +133,165 @@ def parse_sentences(sentences):
                                                     "." not in str(x) and "#" not in str(x) and ";" not in str(
                                                         x) and "}" not in str(
                                                         x) and "{" not in str(x) and "@" not in str(x)]
-                    # extract the ingredients and utensils
-                    ingredients, utensils = extract_items(token_by_part_of_speech)
 
+                misc_dict = {}
+                # extract the ingredients and utensils
+                ingredients, utensils = extract_items(token_by_part_of_speech)
+
+                if utensils:
                     misc_dict = {'utensils': utensils}
 
-                    # extract temperature
-                    temp_pattern = r'([+-]?\d+(\.\d+)*)\s?°([CcFf])'
-                    matches = re.findall(temp_pattern, sentence)
-                    if matches:
-                        first_match = matches[0]
-                        temp_str = first_match[0] + ' °' + first_match[2].upper()
-                        misc_dict['temperature'] = temp_str
+                # extract temperature
+                temp_pattern = r'([+-]?\d+(\.\d+)*)\s?°([CcFf])'
+                matches = re.findall(temp_pattern, sentence)
+                if matches:
+                    first_match = matches[0]
+                    temp_str = first_match[0] + ' °' + first_match[2].upper()
+                    misc_dict['temperature'] = temp_str
 
-                    # extract time TODO doesn't entirely match a phrase like 15 to 20 minutes
-                    time_pattern = r'(\d+)(\s*)(second(s*)|minute(s*)|hour(s*))'
-                    matches = re.findall(time_pattern, sentence)
-                    if matches:
-                        first_match = matches[0]
-                        time_str = first_match[0] + ' ' + first_match[2]
-                        misc_dict['time'] = time_str
+                # extract time TODO doesn't entirely match a phrase like 15 to 20 minutes
+                time_pattern = r'(\d+)(\s*)(second(s*)|minute(s*)|hour(s*))'
+                matches = re.findall(time_pattern, sentence)
+                if matches:
+                    first_match = matches[0]
+                    time_str = first_match[0] + ' ' + first_match[2]
+                    misc_dict['time'] = time_str
 
-                    new_step = Step(sentence, sentence_verbs, ingredients, misc_dict)
-                    all_steps.append(new_step)
+                new_step = Step(sentence, sentence_verbs, ingredients, misc_dict)
+                all_steps.append(new_step)
+
 
 # extract recipe text from website given URL
 def get_recipe_from_url(url):
-  r = requests.get(url)
-  soup = BeautifulSoup(r.content, 'html.parser')
-  print(soup.text)
-  recipe_doc = nlp(soup.text)  # extract text from site
-  return recipe_doc
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, 'html.parser')
+    # print(soup.text)
+    recipe_doc = nlp(soup.text)  # extract text from site
+    return recipe_doc
+
 
 # sets up data from recipe text to a format the chatbot can answer questions with
 def setup(url):
-  recipe_doc = get_recipe_from_url(url)
-  sentences = list(recipe_doc.sents)
-  parse_sentences(sentences)
-  for step in all_steps: #this loop's just nice for debugging
-    print(step)
-  print(f'Total number of steps: {len(all_steps)}')
+    recipe_doc = get_recipe_from_url(url)
+    sentences = list(recipe_doc.sents)
+    parse_sentences(sentences)
+    for step in all_steps:  # this loop's just nice for debugging
+        print(step)
 
-
-
-# TODO For question answering stuff:
-#  for every step we have found, then figure out the ingredients, utensils, parameters, etc.
 
 # interprets questions and provides a tuple of current step number and answer
 def answer_question(curr_step, prompt, question, last_answer):
-  if prompt == "show me the ingredients list":
-    all_ingredients = []
-    for step in all_steps:
-      for ingredient in step.ingredients:
-        if ingredient not in all_ingredients:
-          all_ingredients.append(ingredient)
-    return (curr_step, f"Here are all the ingredients: {all_ingredients}")
+    if prompt == "show me the ingredients list":
+        all_ingredients = []
+        for step in all_steps:
+            for ingredient in step.ingredients:
+                if ingredient not in all_ingredients:
+                    all_ingredients.append(ingredient)
+        return (curr_step, f"Here are all the ingredients: {all_ingredients}")
 
-  elif prompt == "go to the next step":
-    if curr_step < len(all_steps) - 1:
-      return (curr_step + 1, f"Here's the next step: {all_steps[curr_step + 1].text}")
-    return (curr_step, "This is the final step!")
+    elif prompt == "go to the next step":
+        if curr_step < len(all_steps) - 1:
+            return (curr_step + 1, f"Here's the next step: {all_steps[curr_step + 1].text}")
+        return (curr_step, "This is the final step!")
 
-  elif prompt == "go back one step":
-    if curr_step > 0:
-      return (curr_step - 1, f"Here's the step before this one: {all_steps[curr_step - 1].text}")
-    return (curr_step, "This is the first step!")
+    elif prompt == "go back one step":
+        if curr_step > 0:
+            return (curr_step - 1, f"Here's the step before this one: {all_steps[curr_step - 1].text}")
+        return (curr_step, "This is the first step!")
 
-  elif prompt == "take me to the":
-    digit_list = [x for x in re.findall("[0-9]*", question) if x != '']
-    if len(digit_list) == 0:
-      return (curr_step, None) #exit returning no information, malformed question
-    step_num = digit_list[0]
-    if int(step_num) < len(all_steps) and int(step_num) > 0:
-      return (int(step_num) - 1, f"Here's step {int(step_num)}: {all_steps[int(step_num) - 1].text}")
-    return (curr_step, f"There isn't a {int(step_num)}th step in this recipe!")
+    elif prompt == "take me to the":
+        digit_list = [x for x in re.findall("[0-9]*", question) if x != '']
+        if len(digit_list) == 0:
+            return (curr_step, None)  # exit returning no information, malformed question
+        step_num = digit_list[0]
+        if int(step_num) < len(all_steps) and int(step_num) > 0:
+            return (int(step_num) - 1, f"Here's step {int(step_num)}: {all_steps[int(step_num) - 1].text}")
+        return (curr_step, f"There isn't a {int(step_num)}th step in this recipe!")
 
-  elif prompt == "repeat please":
-    return (curr_step, last_answer)
+    elif prompt == "repeat please":
+        return (curr_step, last_answer)
 
-  elif prompt == "how do i do that":
-    help_url_stem = "https://www.youtube.com/results?search_query=how+to+"
-    for step in all_steps:
-      if step.text in last_answer:
-        if len(step.actions) != 0:
-            help_url_stem += str(step.actions[0])
-            if len(step.ingredients) != 0:
-               help_url_stem += "+" + str(step.ingredients[0])
-            return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
-    return (curr_step, "I unfortunately could not find a reference for that step.")
+    elif prompt == "how do i do that":
+        help_url_stem = "https://www.youtube.com/results?search_query=how+to+"
+        for step in all_steps:
+            if step.text in last_answer:
+                if len(step.actions) != 0:
+                    help_url_stem += str(step.actions[0])
+                    if len(step.ingredients) != 0:
+                        help_url_stem += "+" + str(step.ingredients[0])
+                    return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
+        return (curr_step, "I unfortunately could not find a reference for that step.")
 
-  elif prompt == "how do i":
-    help_url_stem = "https://www.youtube.com/results?search_query=how+to"
-    action = question.replace(prompt, "").strip()
-    if action == "":
-      return (curr_step, None) #exit returning no information, malformed question
-    words = action.split()
-    for word in words:
-      help_url_stem += "+" + word
-    return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
+    elif prompt == "how do i":
+        help_url_stem = "https://www.youtube.com/results?search_query=how+to"
+        action = question.replace(prompt, "").strip()
+        if action == "":
+            return (curr_step, None)  # exit returning no information, malformed question
+        words = action.split()
+        for word in words:
+            help_url_stem += "+" + word
+        return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
 
-  elif prompt == "what temperature":
-      curr_step_obj = all_steps[curr_step]
-      if 'temperature' in curr_step_obj.misc:
-          return curr_step, f'The recipe recommends {curr_step_obj.misc["temperature"]}!'
-      else:
-          return curr_step, None
+    elif prompt == "what temperature":
+        curr_step_obj = all_steps[curr_step]
+        if 'temperature' in curr_step_obj.misc:
+            return curr_step, f'The recipe recommends {curr_step_obj.misc["temperature"]}!'
+        else:
+            return curr_step, None
 
-  elif prompt == "how long do i":
-      curr_step_obj = all_steps[curr_step]
-      if 'time' in curr_step_obj.misc:
-          return curr_step, f'The recipe recommends {curr_step_obj.misc["time"]}!'
-      else:
-          return curr_step, None
+    elif prompt == "how long do i":
+        curr_step_obj = all_steps[curr_step]
+        if 'time' in curr_step_obj.misc:
+            return curr_step, f'The recipe recommends {curr_step_obj.misc["time"]}!'
+        else:
+            return curr_step, None
 
-  else:
-      return (curr_step, None)
+    else:
+        return (curr_step, None)
 
 
 """
 elif prompt == "what is a":
 elif prompt == "how much of":
-elif prompt == "what temperature":
-elif prompt == "how long do i":
 elif prompt == "when is it done":
 elif prompt == "what can i substitute for":
 """
+
+
 # fields user questions and responds
 def chat_with_user():
     valid_url = None
-    recipe_url = input("Hi, I'm Alex! Please enter a recipe URL.").strip() # most basic name ever 💀
+    recipe_url = input("Hi, I'm Alex! Please enter a recipe URL. ").strip()  # most basic name ever 💀
     while not valid_url:
-      valid_url = True
-      try:
-        setup(recipe_url) #you'll have to input https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/ when prompted for debugging
-      except:
-        valid_url = False
-        recipe_url = input("Please enter a valid URL.")
+        valid_url = True
+        try:
+            setup(recipe_url)  # you'll have to input https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/ when prompted for debugging
+        except:
+            valid_url = False
+            recipe_url = input("Please enter a valid URL. ")
 
     curr_step = 0
     answer = ""
-    last_ans = "Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit."
+    last_ans = "Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.\n"
     prompt_in_Q = False
     while True:
-      question = input("Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.").lower()
-      for q in chatbot_Qs:
-        if q in question:
-          curr_step, answer = answer_question(curr_step, q.lower(), question, last_ans)
-          if answer == None:
-            answer = "Sorry, I didn't understand your question. Please try to reformulate it."
-          prompt_in_Q = True
-          print(answer)
-          break
-      if not prompt_in_Q:
-        print("Sorry, I didn't understand your question. Please try to reformulate it.")
-      if question == 'bye':
-        print("Bye!")
-        break
-      last_ans = answer
-      prompt_in_Q = False
+        question = input("Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.\n").lower()
+        for q in chatbot_Qs:
+            if q in question:
+                curr_step, answer = answer_question(curr_step, q.lower(), question, last_ans)
+                if answer == None:
+                    answer = "Sorry, I didn't understand your question. Please try to reformulate it."
+                prompt_in_Q = True
+                print(answer + "\n")
+                break
+        if not prompt_in_Q:
+            print("Sorry, I didn't understand your question. Please try to reformulate it.\n")
+        if question == 'bye':
+            print("Bye!")
+            break
+        last_ans = answer
+        prompt_in_Q = False
+
 
 chat_with_user()
 
