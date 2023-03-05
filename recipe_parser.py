@@ -76,16 +76,6 @@ lexicon = {
 
 nlp = spacy.load("en_core_web_sm")
 
-# TODO Make it work w any url and test accordingly
-url = "https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/"
-r = requests.get(url)
-soup = BeautifulSoup(r.content, 'html.parser')
-# print(soup.text)
-
-recipe_doc = nlp(soup.text)  # extract text from site
-
-sentences = list(recipe_doc.sents)
-
 """
 Going forward: maybe we do this dependency parsing for each sentence and then have a dictionary of sentences to part of speech info for it.
 or maybe try to figure out how to typecheck nouns for ingredients or something like that. honestly it's unclear to me our exact goal so I'll
@@ -144,9 +134,20 @@ def parse_sentences():
                 new_step.ingredients, new_step.misc = extract_items(token_by_part_of_speech)
                 all_steps.append(new_step)
 
-parse_sentences()
+# extract recipe text from website given URL
+def get_recipe_from_url(url):
+  r = requests.get(url)
+  soup = BeautifulSoup(r.content, 'html.parser')
+  print(soup.text)
+  recipe_doc = nlp(soup.text)  # extract text from site
+  return recipe_doc
 
-for step in all_steps:
+# sets up data from recipe text to a format the chatbot can answer questions with
+def setup(url):
+  recipe_doc = get_recipe_from_url(url)
+  sentences = list(recipe_doc.sents)
+  parse_sentences()
+  for step in all_steps: #this loop's just nice for debugging
     print(step)
 
 # TODO For question answering stuff:
@@ -184,12 +185,32 @@ def answer_question(curr_step, prompt, question, last_answer):
   elif prompt == "repeat please":
     return (curr_step, last_answer)
 
+  elif prompt == "how do i do that":
+    help_url_stem = "https://www.youtube.com/results?search_query=how+to+"
+    for step in all_steps:
+      if step.text in last_answer:
+        if len(step.actions) != 0:
+            help_url_stem += str(step.actions[0])
+            if len(step.ingredients) != 0:
+               help_url_stem += "+" + str(step.ingredients[0])
+            return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
+    return (curr_step, "We unfortunately could not find a reference for that step.")
+
+  elif prompt == "how do i":
+    help_url_stem = "https://www.youtube.com/results?search_query=how+to"
+    action = question.replace(prompt, "").strip()
+    if action == "":
+      return (curr_step, None) #exit returning no information, malformed question
+    words = action.split()
+    for word in words:
+      help_url_stem += "+" + word
+    return (curr_step, f"No worries. I found a reference for you: {help_url_stem}")
+
   else:
       return (curr_step, None)
 
+
 """
-elif prompt == "how do i do that":
-elif prompt == "how do i":
 elif prompt == "what is a":
 elif prompt == "how much of":
 elif prompt == "what temperature":
@@ -199,8 +220,16 @@ elif prompt == "what can i substitute for":
 """
 # fields user questions and responds
 def chat_with_user():
-    recipe_url = input("Hi, I'm Alex! Please enter a recipe url.") # most basic name ever 💀
-    #Insert code that actually uses this url to fetch recipe text
+    valid_url = None
+    recipe_url = input("Hi, I'm Alex! Please enter a recipe URL.").strip() # most basic name ever 💀
+    while not valid_url:
+      valid_url = True
+      try:
+        setup(recipe_url) #you'll have to input https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/ when prompted for debugging
+      except:
+        valid_url = False
+        recipe_url = input("Please enter a valid URL.")
+
     curr_step = 0
     answer = ""
     last_ans = "Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit."
@@ -222,6 +251,7 @@ def chat_with_user():
         break
       last_ans = answer
       prompt_in_Q = False
+
 chat_with_user()
 
 ''' Original dependency parsing code below: '''
