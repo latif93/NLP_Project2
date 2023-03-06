@@ -259,14 +259,22 @@ def answer_question(curr_step, prompt, question, last_answer):
     elif prompt == "when is it done": # confused on what 'it' is referring to, last step or time for current step?
         return (len(all_steps) - 1, f"The recipe is done when you reach this step: {all_steps[len(all_steps) - 1].text}")
 
+    elif prompt == "what can i substitute for":
+        help_url_stem = "https://www.google.com/search?q=what+can+i+substitute+for+"
+        action = question.replace(prompt, "").strip()
+        if action == "":
+            return (curr_step, None)
+        words = action.split()
+        for word in words:
+            help_url_stem += word
+        return (curr_step, f"Here's a Google search for you: {help_url_stem}")
+
     else:
         return (curr_step, None)
 
 
 """
 elif prompt == "how much of":
-elif prompt == "when is it done":
-elif prompt == "what can i substitute for":
 """
 
 
