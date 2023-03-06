@@ -20,6 +20,8 @@ import re
 - You will need a lexicon of words used in recipes corresponding to this simple semantic model.
 """
 
+all_ingredients = []
+all_utensils = []
 all_steps = []  # "You need a data structure to support navigation forward and backward."
 chatbot_Qs = ["show me the ingredients list", "go back one step", "go to the next step", "repeat please",
               "take me to the",
@@ -137,6 +139,8 @@ def parse_sentences(sentences):
                 misc_dict = {}
                 # extract the ingredients and utensils
                 ingredients, utensils = extract_items(token_by_part_of_speech)
+                ingredients = list(set(ingredients))
+                utensils = list(set(utensils))
 
                 if utensils:
                     misc_dict = {'utensils': utensils}
@@ -159,6 +163,8 @@ def parse_sentences(sentences):
 
                 new_step = Step(sentence, sentence_verbs, ingredients, misc_dict)
                 all_steps.append(new_step)
+                all_ingredients.extend(ingredients)
+                all_utensils.extend(utensils)
 
 
 # extract recipe text from website given URL
@@ -175,8 +181,8 @@ def setup(url):
     recipe_doc = get_recipe_from_url(url)
     sentences = list(recipe_doc.sents)
     parse_sentences(sentences)
-    for step in all_steps:  # this loop's just nice for debugging
-        print(step)
+    # for step in all_steps:  # this loop's just nice for debugging
+    #     print(step)
 
 
 # interprets questions and provides a tuple of current step number and answer
@@ -237,14 +243,14 @@ def answer_question(curr_step, prompt, question, last_answer):
         if 'temperature' in curr_step_obj.misc:
             return curr_step, f'The recipe recommends {curr_step_obj.misc["temperature"]}!'
         else:
-            return curr_step, None
+            return curr_step, "I unfortunately could not find a temperature for this step."
 
     elif prompt == "how long do i":
         curr_step_obj = all_steps[curr_step]
         if 'time' in curr_step_obj.misc:
             return curr_step, f'The recipe recommends {curr_step_obj.misc["time"]}!'
         else:
-            return curr_step, None
+            return curr_step, "I unfortunately could not find out how long you should do this step."
 
     elif prompt == "what is a":
         help_url_stem = "https://en.wikipedia.org/wiki/"
@@ -292,6 +298,11 @@ def chat_with_user():
 
     curr_step = 0
     answer = ""
+    output_ingr = ', '.join(list(set(all_ingredients)))
+    output_ute = ', '.join(list(set(all_utensils)))
+
+    print('The ingredients you will need are ' + output_ingr)
+    print('The utensils you will need are ' + output_ute)
     last_ans = "Ask me a question regarding this recipe. Alternatively, enter 'bye' to quit.\n"
     prompt_in_Q = False
     while True:
