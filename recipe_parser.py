@@ -246,12 +246,21 @@ def answer_question(curr_step, prompt, question, last_answer):
         else:
             return curr_step, None
 
+    elif prompt == "what is a":
+        help_url_stem = "https://en.wikipedia.org/wiki/"
+        action = question.replace(prompt, "").strip()
+        if action == "":
+            return (curr_step, None)
+        words = action.split()
+        for word in words:
+            help_url_stem += word + "_" # add underscores between words
+        return (curr_step, f"Here's a Wikipedia article for you: {help_url_stem}")
+
     else:
         return (curr_step, None)
 
 
 """
-elif prompt == "what is a":
 elif prompt == "how much of":
 elif prompt == "when is it done":
 elif prompt == "what can i substitute for":
