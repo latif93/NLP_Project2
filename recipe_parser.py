@@ -256,6 +256,9 @@ def answer_question(curr_step, prompt, question, last_answer):
             help_url_stem += word + "_" # add underscores between words
         return (curr_step, f"Here's a Wikipedia article for you: {help_url_stem}")
 
+    elif prompt == "when is it done": # confused on what 'it' is referring to, last step or time for current step?
+        return (len(all_steps) - 1, f"The recipe is done when you reach this step: {all_steps[len(all_steps) - 1].text}")
+
     else:
         return (curr_step, None)
 
