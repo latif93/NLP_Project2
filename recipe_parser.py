@@ -1,3 +1,5 @@
+import unicodedata
+
 from bs4 import BeautifulSoup  # webscraper
 import requests  # html request maker
 import spacy
@@ -21,12 +23,14 @@ import random
 - You will need a lexicon of words used in recipes corresponding to this simple semantic model.
 """
 
+ingredients_dict = {}  # just using as a global variable since a lot of the helper functions may use it
 all_steps = []  # "You need a data structure to support navigation forward and backward."
 chatbot_Qs = ["show me the ingredients list", "go back one step", "go to the next step", "repeat please",
               "take me to the",
               "how do i do that", "how do i", "what is a", "how much of", "what temperature", "how long do i"
                                                                                               "when is it done",
-              "what can i substitute for", "transform this recipe to"]  # All question prompts from assignment description
+              "what can i substitute for",
+              "transform this recipe to"]  # All question prompts from assignment description
 
 
 # "To support question-answering, you need to annotate each step object with the following information:"
@@ -45,11 +49,7 @@ class Step:
         return output
 
 
-# TODO by "You will need a lexicon of words used in recipes corresponding to this simple semantic model.", I think
-#  they mean that we should have a hard-coded structure of words that would most commonly show up???
-# just used chatgpt to generate some words for now, but basically we could use the lexicon for the type checking system
-#
-# TODO all generated, might need to think of more words ourselves to account for
+# "You will need a lexicon of words used in recipes corresponding to this simple semantic model."
 lexicon = {
     "actions": ["add", "adding", "bake", "baking", "beat", "beating", "blend", "blending", "boil", "boiling", "broil",
                 "broiling", "brush", "brushing", "chill", "chilling", "coat", "coating", "combine", "combining", "cook",
@@ -77,135 +77,138 @@ lexicon = {
                  'pot', 'pan', 'skillet', 'saucepan', 'ladle', 'tongs', 'spatula', 'slotted spoon', 'baking dish',
                  'baking sheet', 'pie dish', 'casserole dish', 'grill pan', 'wok', 'slow cooker', 'blender',
                  'food processor', 'hand mixer', 'stand mixer', 'pastry cutter'],
-    "parameters": []}  # TODO look for numbers that represent things like time and temperature
+    "parameters": []}
 
 nlp = spacy.load("en_core_web_sm")
 
-#Parameters to swap in and out for transformations 
-veggie_ingredients = ['beans', 'lentils', 'tofu', 'tempeh', 'seitan', 'quinoa', 'brown rice', 'wild rice', 'bulgur', 
+# Parameters to swap in and out for transformations
+veggie_ingredients = ['beans', 'lentils', 'tofu', 'tempeh', 'seitan', 'quinoa', 'brown rice', 'wild rice', 'bulgur',
                       'farro', 'barley', 'oats', 'almonds', 'cashews', 'pistachios', 'walnuts', 'pecans', 'hazelnuts',
-                      'macadamia nuts', 'brazil nuts', 'chia seeds', 'flax seeds', 'hemp seeds', 'pumpkin seeds', 
-                      'sesame seeds', 'sunflower seeds', 'poppy seeds', 'nutritional yeast', 'spinach', 'kale', 
-                      'broccoli', 'cauliflower', 'carrots', 'beets', 'sweet potatoes', 'mushrooms', 'zucchini', 
-                      'bell peppers', 'tomatoes', 'onions', 'garlic', 'ginger', 'eggplant', 'cabbage', 'celery', 
-                      'asparagus', 'green beans', 'peas', 'apples', 'oranges', 'bananas', 'berries', 'grapes', 'melons', 
-                      'pineapple', 'mango', 'papaya', 'kiwi', 'avocado', 'pomegranate', 'basil', 'cilantro', 'parsley', 
-                      'rosemary', 'thyme', 'dill', 'mint', 'sage', 'oregano', 'bay leaves', 'cumin', 'coriander', 'turmeric',
-                      'paprika', 'chili powder', 'cinnamon', 'nutmeg', 'cardamom', 'cloves', 'allspice', 'mustard seeds', 
+                      'macadamia nuts', 'brazil nuts', 'chia seeds', 'flax seeds', 'hemp seeds', 'pumpkin seeds',
+                      'sesame seeds', 'sunflower seeds', 'poppy seeds', 'nutritional yeast', 'spinach', 'kale',
+                      'broccoli', 'cauliflower', 'carrots', 'beets', 'sweet potatoes', 'mushrooms', 'zucchini',
+                      'bell peppers', 'tomatoes', 'onions', 'garlic', 'ginger', 'eggplant', 'cabbage', 'celery',
+                      'asparagus', 'green beans', 'peas', 'apples', 'oranges', 'bananas', 'berries', 'grapes', 'melons',
+                      'pineapple', 'mango', 'papaya', 'kiwi', 'avocado', 'pomegranate', 'basil', 'cilantro', 'parsley',
+                      'rosemary', 'thyme', 'dill', 'mint', 'sage', 'oregano', 'bay leaves', 'cumin', 'coriander',
+                      'turmeric',
+                      'paprika', 'chili powder', 'cinnamon', 'nutmeg', 'cardamom', 'cloves', 'allspice',
+                      'mustard seeds',
                       'almond milk', 'soy milk', 'oat milk', 'coconut milk']
 
-veggie_methods = ['bake', 'blanch', 'boil', 'braise', 'broil', 'can', 'dehydrate', 'deep-fry', 'ferment', 'fry', 
-                  'grill', 'grill on skewers', 'poach', 'pressure cook', 'roast','roast in salt crust', 'sauté',
-                  'sear', 'sear and braise', 'shallow-fry','simmer', 'smoke', 'steam', 'stew', 'stir-fry', 'toast', 'whisk', 'beat',
-                  'fold', 'marinate', 'pickle', 'brine', 'caramelize', 'glaze', 'grate', 'chop', 'dice', 'mince', 
-                  'puree', 'blend', 'juice', 'zest', 'slice', 'shred', 'grate', 'julienne', 'spiralize', 'knead', 
+veggie_methods = ['bake', 'blanch', 'boil', 'braise', 'broil', 'can', 'dehydrate', 'deep-fry', 'ferment', 'fry',
+                  'grill', 'grill on skewers', 'poach', 'pressure cook', 'roast', 'roast in salt crust', 'sauté',
+                  'sear', 'sear and braise', 'shallow-fry', 'simmer', 'smoke', 'steam', 'stew', 'stir-fry', 'toast',
+                  'whisk', 'beat',
+                  'fold', 'marinate', 'pickle', 'brine', 'caramelize', 'glaze', 'grate', 'chop', 'dice', 'mince',
+                  'puree', 'blend', 'juice', 'zest', 'slice', 'shred', 'grate', 'julienne', 'spiralize', 'knead',
                   'proof', 'roll', 'stuff', 'toss', 'wrap', 'dust', 'season', 'garnish', 'infuse', 'reduce', 'thicken',
-                  'emulsify', 'clarify', 'strain', 'pickle', 'preserve', 'cure', 'chill', 'freeze', 'thaw', 'reheat', 
+                  'emulsify', 'clarify', 'strain', 'pickle', 'preserve', 'cure', 'chill', 'freeze', 'thaw', 'reheat',
                   'sous-vide cook']
 
-non_veggie_ingredients = ["beef", "pork", "lamb", "veal", "goat", "rabbit", "chicken", "turkey", "duck", "goose", 
-                          "quail", "game meat", "fish", "shellfish", "crustaceans", "oysters", "clams", "mussels", 
-                          "scallops", "shrimp", "prawns", "crab", "lobster", "crayfish", "anchovies", "sardines", 
-                          "tuna", "salmon", "cod", "haddock", "tilapia", "catfish", "trout", "mahi-mahi", "swordfish", 
-                          "octopus", "squid", "calamari", "cuttlefish", "snails", "frogs", "turtle", "alligator", 
-                          "bacon", "ham", "prosciutto", "sausage", "chorizo", "salami", "pepperoni", "pastrami", 
-                          "bologna", "hot dogs", "meatballs", "meatloaf", "liver", "kidneys", "heart", "tongue", 
-                          "tripe", "brain", "bone marrow", "blood", "pate", "liverwurst", "foie gras", 
+non_veggie_ingredients = ["beef", "pork", "lamb", "veal", "goat", "rabbit", "chicken", "turkey", "duck", "goose",
+                          "quail", "game meat", "fish", "shellfish", "crustaceans", "oysters", "clams", "mussels",
+                          "scallops", "shrimp", "prawns", "crab", "lobster", "crayfish", "anchovies", "sardines",
+                          "tuna", "salmon", "cod", "haddock", "tilapia", "catfish", "trout", "mahi-mahi", "swordfish",
+                          "octopus", "squid", "calamari", "cuttlefish", "snails", "frogs", "turtle", "alligator",
+                          "bacon", "ham", "prosciutto", "sausage", "chorizo", "salami", "pepperoni", "pastrami",
+                          "bologna", "hot dogs", "meatballs", "meatloaf", "liver", "kidneys", "heart", "tongue",
+                          "tripe", "brain", "bone marrow", "blood", "pate", "liverwurst", "foie gras",
                           "beef or chicken broth"]
 
-non_veggie_methods = ["bake", "barbecue", "blanch", "braise", "brine", "broast", "broil", "can", "caramelize", 
-                      "deep-fry", "ferment", "freeze", "glaze", "grill", "hot-smoke", "marinate", "pan-fry", "pickle", 
+non_veggie_methods = ["bake", "barbecue", "blanch", "braise", "brine", "broast", "broil", "can", "caramelize",
+                      "deep-fry", "ferment", "freeze", "glaze", "grill", "hot-smoke", "marinate", "pan-fry", "pickle",
                       "poach", "pressure cook", "roast", "rotisserie", "sauté", "sear", "shallow-fry", "simmer",
-                      "slow-cook", "smoke", "sous-vide cook", "steam", "stew", "stir-fry", "stovetop smoke", 
-                      "roast in salt crust", "stir-fry on high heat", "flash-sear on high heat", "pit-roast", 
+                      "slow-cook", "smoke", "sous-vide cook", "steam", "stew", "stir-fry", "stovetop smoke",
+                      "roast in salt crust", "stir-fry on high heat", "flash-sear on high heat", "pit-roast",
                       "plank-grill", "caveman-style cook (directly on coals)", "reverse-sear", "par-cook",
                       "double-cook", "butterfly grill", "butterfly roast", "char", "blacken", "spit-roast", "griddle",
                       "bard", "lard", "pudding", "pâté", "terrine", "meatloaf", "roulade"]
 
-unhealthy_ingredients = ['sugar', 'high fructose corn syrup', 'artificial sweeteners', 'hydrogenated oils', 
+unhealthy_ingredients = ['sugar', 'high fructose corn syrup', 'artificial sweeteners', 'hydrogenated oils',
                          'trans fats', 'processed meats', 'canned meats', 'refined grains', 'white flour',
                          'white rice', 'white bread', 'packaged snacks', 'instant noodles', 'processed cheese',
-                         'cheese spreads', 'cream cheese', 'heavy cream', 'sour cream', 'margarine', 'shortening', 
-                         'artificial flavorings', 'artificial colors', 'artificial preservatives', 
-                         'monosodium glutamate (MSG)', 'sodium nitrate', 'sodium benzoate', 'food dyes', 
-                         'carrageenan', 'brominated vegetable oil (BVO)', 'aspartame', 'saccharin', 
-                         'acesulfame potassium', 'butylated hydroxyanisole (BHA)', 'butylated hydroxytoluene (BHT)', 
+                         'cheese spreads', 'cream cheese', 'heavy cream', 'sour cream', 'margarine', 'shortening',
+                         'artificial flavorings', 'artificial colors', 'artificial preservatives',
+                         'monosodium glutamate (MSG)', 'sodium nitrate', 'sodium benzoate', 'food dyes',
+                         'carrageenan', 'brominated vegetable oil (BVO)', 'aspartame', 'saccharin',
+                         'acesulfame potassium', 'butylated hydroxyanisole (BHA)', 'butylated hydroxytoluene (BHT)',
                          'propyl gallate']
 
-unhealthy_methods = ['deep-fry', 'pan-fry', 'sauté in butter or oil', 'bread and fry', 
+unhealthy_methods = ['deep-fry', 'pan-fry', 'sauté in butter or oil', 'bread and fry',
                      'cook with hydrogenated oils or trans fats', 'grill or barbecue over high heat', 'charbroil',
                      'overcook or burn food', 'cook with excessive salt', 'cook with excessive sugar',
                      'microwave in plastic containers or wrap', 'use non-stick cookware at high temperatures',
-                     'cook with processed meats or highly processed ingredients', 'cook with MSG', 
-                     'cook with artificial sweeteners or flavorings', 'use pre-packaged or convenience foods', 
-                     'add excessive amounts of cheese or creamy sauces to dishes', 
-                     'a boatload of heavy cream or butter', 'a ton of processed and refined carbohydrates', 
+                     'cook with processed meats or highly processed ingredients', 'cook with MSG',
+                     'cook with artificial sweeteners or flavorings', 'use pre-packaged or convenience foods',
+                     'add excessive amounts of cheese or creamy sauces to dishes',
+                     'a boatload of heavy cream or butter', 'a ton of processed and refined carbohydrates',
                      'a ton of red meat or fatty cuts of meat']
 
 healthy_ingredients = ['almonds', 'apples', 'apricots', 'artichokes', 'arugula', 'asparagus', 'avocados', 'bananas',
-                       'barley', 'basil', 'beans', 'beets', 'bell peppers', 'black beans', 'blackberries', 
+                       'barley', 'basil', 'beans', 'beets', 'bell peppers', 'black beans', 'blackberries',
                        'blueberries', 'bok choy', 'broccoli', 'Brussels sprouts', 'buckwheat', 'butternut squash',
-                       'cabbage', 'cantaloupe', 'carrots', 'cashews', 'cauliflower', 'celery', 'chard', 'cherries', 
-                       'chickpeas', 'chia seeds', 'chicken (skinless)', 'cilantro', 'cinnamon', 'coconut', 
+                       'cabbage', 'cantaloupe', 'carrots', 'cashews', 'cauliflower', 'celery', 'chard', 'cherries',
+                       'chickpeas', 'chia seeds', 'chicken (skinless)', 'cilantro', 'cinnamon', 'coconut',
                        'collard greens', 'cranberries', 'cucumbers', 'dill', 'edamame', 'eggplant', 'eggs', 'farro',
                        'fennel', 'figs', 'flaxseeds', 'garlic', 'ginger', 'grapefruit', 'grapes', 'Greek yogurt',
-                       'green beans', 'green onions', 'hemp seeds', 'honey', 'kale', 'kiwis', 'lentils', 'leeks', 
+                       'green beans', 'green onions', 'hemp seeds', 'honey', 'kale', 'kiwis', 'lentils', 'leeks',
                        'lemon', 'lettuce', 'lima beans', 'limes', 'macadamia nuts', 'mangoes', 'millet', 'mung beans',
                        'mushrooms', 'mustard greens', 'navy beans', 'nectarines', 'nuts (various)', 'oats',
-                       'okra', 'olive oil', 'olives', 'onions', 'oranges', 'papayas', 'parsley', 'passion fruit', 
+                       'okra', 'olive oil', 'olives', 'onions', 'oranges', 'papayas', 'parsley', 'passion fruit',
                        'peaches', 'pears', 'peas', 'pecans', 'persimmons', 'pine nuts', 'pineapples', 'pistachios',
                        'pomegranates']
 
-healthy_methods = ['roast vegetables', 'steam with herbs', 'grill lean protein', 'sauté with healthy fats', 
+healthy_methods = ['roast vegetables', 'steam with herbs', 'grill lean protein', 'sauté with healthy fats',
                    'bake with whole grains', 'use slow cooker', 'grill or roast veggies', 'poach fish in broth',
-                   'use citrus or vinegar dressings', 'stir-fry with colorful veggies', 'use pressure cooker', 
+                   'use citrus or vinegar dressings', 'stir-fry with colorful veggies', 'use pressure cooker',
                    'grill or roast fruit', 'make soups and stews with veggies and lean protein',
                    'use herbs and spices', 'cook with plant-based protein', 'grill or roast low-fat dairy']
 
 pakistani_or_north_indian_cuisine_ingredients = ['haldi (turmeric)', 'dhania (coriander)', 'jeera (cumin)',
                                                  'kali mirch (black pepper)', 'laung (clove)', 'elaichi (cardamom)',
                                                  'dalchini (cinnamon)', 'kasuri methi (dried fenugreek leaves)',
-                                                 'ajwain (carom seeds)', 'saunf (fennel)', 
+                                                 'ajwain (carom seeds)', 'saunf (fennel)',
                                                  'amchur (dried mango powder)', 'anardana (dried pomegranate seeds)',
                                                  'garam masala (spice blend)', 'chaat masala (spice blend)',
-                                                 'hing (asafoetida)', 'mustard seeds', 'curry leaves', 
-                                                 'green cardamom', 'bay leaves', 'red chili powder', 
-                                                 'kasoori methi (dried fenugreek leaves)', 'cumin powder', 
+                                                 'hing (asafoetida)', 'mustard seeds', 'curry leaves',
+                                                 'green cardamom', 'bay leaves', 'red chili powder',
+                                                 'kasoori methi (dried fenugreek leaves)', 'cumin powder',
                                                  'coriander powder', 'mustard oil', 'ghee (clarified butter)',
-                                                 'besan (gram flour)', 'urad dal (black gram)', 
-                                                 'chana dal (split chickpeas)', 'moong dal (mung beans)', 
-                                                 'toor dal (pigeon peas)', 'masoor dal (red lentils)', 
+                                                 'besan (gram flour)', 'urad dal (black gram)',
+                                                 'chana dal (split chickpeas)', 'moong dal (mung beans)',
+                                                 'toor dal (pigeon peas)', 'masoor dal (red lentils)',
                                                  'paneer (cottage cheese)', 'dahi (yogurt)', 'ghee (clarified butter)',
-                                                 'desi ghee', 'coconut milk', 'tamarind', 'jaggery', 'basmati rice', 
-                                                 'atta (whole wheat flour)', 'maida (all-purpose flour)', 
-                                                 'suji (semolina)', 'ajwain seeds', 'kalonji (nigella seeds)', 
-                                                 'saffron', 'kewra essence', 'rose water', 'cardamom powder', 
-                                                 'almond powder', 'cashew powder', 'poppy seeds', 'sesame seeds', 
+                                                 'desi ghee', 'coconut milk', 'tamarind', 'jaggery', 'basmati rice',
+                                                 'atta (whole wheat flour)', 'maida (all-purpose flour)',
+                                                 'suji (semolina)', 'ajwain seeds', 'kalonji (nigella seeds)',
+                                                 'saffron', 'kewra essence', 'rose water', 'cardamom powder',
+                                                 'almond powder', 'cashew powder', 'poppy seeds', 'sesame seeds',
                                                  'coconut flakes']
 
-pakistani_or_north_indian_cuisine_methods = ['chop', 'grate', 'mince', 'peel', 'grate', 'grind', 'blend', 'mix', 
+pakistani_or_north_indian_cuisine_methods = ['chop', 'grate', 'mince', 'peel', 'grate', 'grind', 'blend', 'mix',
                                              'marinate', 'sauté', 'roast', 'bake', 'fry', 'boil', 'simmer', 'steam',
                                              'grill', 'barbecue', 'tandoori', 'smoke', 'pressure-cook', 'slow-cook',
                                              'ferment', 'pickle', 'can', 'preserve', 'dry', 'sun-dry', 'temper',
                                              'season', 'stuff', 'garnish', 'toast', 'roast in salt crust',
-                                             'stir-fry', 'shallow-fry', 'deep-fry', 'braise', 'blanch', 'parboil', 
-                                             'char-grill', 'griddle', 'roast on spit', 'baste', 'smoke', 
-                                             'cook in clay oven (tandoor)', 'cook in a deep pot (handi)', 
-                                             'cook on a griddle (tawa)', 'cook on a flat pan (tava)', 
-                                             'cook in a wok (kadhai)', 'cook in a clay pot (matka)', 
+                                             'stir-fry', 'shallow-fry', 'deep-fry', 'braise', 'blanch', 'parboil',
+                                             'char-grill', 'griddle', 'roast on spit', 'baste', 'smoke',
+                                             'cook in clay oven (tandoor)', 'cook in a deep pot (handi)',
+                                             'cook on a griddle (tawa)', 'cook on a flat pan (tava)',
+                                             'cook in a wok (kadhai)', 'cook in a clay pot (matka)',
                                              'cook in a pressure cooker (nagari)', 'cook in a slow cooker (dam pukht)',
-                                             'cook on a hot plate (plancha)', 'cook in a large pot (degh)', 
+                                             'cook on a hot plate (plancha)', 'cook in a large pot (degh)',
                                              'cook in a double boiler (kund)']
 
 gluten_and_lactose_free_ingredients = ["Kale", "Collard greens", "Spinach", "Chard", "Cabbage", "Broccoli",
-                                        "Red or green leaf lettuce", "Cauliflower", "Green beans", "Asparagus", 
-                                        "Eggplant", "Sweet potatoes or yams", "Potatoes (all varieties)", "Carrots", 
-                                        "Beets", "Acorn Squash", "Butternut Squash", "Zucchini", "Delicata Squash", 
-                                        "Spaghetti Squash", "Tomatoes", "Eggplant", "Kabocha Squash", "Pumpkin", 
+                                        "Red or green leaf lettuce", "Cauliflower", "Green beans", "Asparagus",
+                                        "Eggplant", "Sweet potatoes or yams", "Potatoes (all varieties)", "Carrots",
+                                        "Beets", "Acorn Squash", "Butternut Squash", "Zucchini", "Delicata Squash",
+                                        "Spaghetti Squash", "Tomatoes", "Eggplant", "Kabocha Squash", "Pumpkin",
                                         "Onions", "Garlic", "Shallots", "Leeks", "Mushrooms", "Peppers", "Avocado",
-                                        "White rice", "Brown rice", "Jasmine rice", "Wild rice", "Arborio rice", 
-                                        "Quinoa", "Kasha (buckwheat)", 
-                                        "Quick-cooking, steel cut, or rolled old fashioned oats (choose “gluten-free” oats)", 
+                                        "White rice", "Brown rice", "Jasmine rice", "Wild rice", "Arborio rice",
+                                        "Quinoa", "Kasha (buckwheat)",
+                                        "Quick-cooking, steel cut, or rolled old fashioned oats (choose “gluten-free” oats)",
                                         "Amaranth", "Teff", "Millet", "Popcorn", "Sorghum"]
 
 
@@ -228,6 +231,8 @@ def extract_items(parts_of_speech):
 def parse_sentences(sentences):
     for sentence in sentences:
         sentence = str(sentence).replace('\n', '').lower()
+        # print(sentence)
+        # print()
         sent_obj = nlp(sentence)
         sentence_verbs = []
 
@@ -288,6 +293,30 @@ def get_recipe_from_url(url):
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'html.parser')
     # print(soup.text)
+    # print(soup)
+
+    # Html for every ingredient, this assumes that we only use allrecipes.com urls AND that they all follow the same
+    # general html structure
+    all_ingredients_html = soup.find("div", {"id": "mntl-structured-ingredients_1-0"}).find_all("li")
+    # print(all_ingredients_html)
+    # print('\n\n')
+
+    for ingredient in all_ingredients_html:
+        # extract the quantity, unit, and name of the ingredient
+        quantity_tag = ingredient.find('span', {'data-ingredient-quantity': 'true'})
+        unit_tag = ingredient.find('span', {'data-ingredient-unit': 'true'})
+        name_tag = ingredient.find('span', {'data-ingredient-name': 'true'})
+
+        if quantity_tag and unit_tag and name_tag:
+            quantity = quantity_tag.text.strip()
+            unit = unit_tag.text.strip()
+            name = name_tag.text.strip()
+
+            # print(quantity, unit, name)
+
+            ingredients_dict[name] = {'quantity': quantity, 'unit': unit, 'text': f'{quantity} {unit} {name}'}
+
+    # print(ingredients_dict)
     recipe_doc = nlp(soup.text)  # extract text from site
     return recipe_doc
 
@@ -297,30 +326,48 @@ def setup(url):
     recipe_doc = get_recipe_from_url(url)
     sentences = list(recipe_doc.sents)
     parse_sentences(sentences)
-    for step in all_steps:  # this loop's just nice for debugging
-        print(step)
+    # for step in all_steps:  # this loop's just nice for debugging
+    #     print(step)
     print(get_recipe_details())
 
+
 def get_recipe_details():
-      recipe_details = {}
-      recipe_details['ingredients'] = []
-      recipe_details['methods'] = []
-      recipe_details['utensils'] = []
-      recipe_details['times'] = []
-      recipe_details['temperatures'] = []
-      for step in all_steps:
-          for ingredient in step.ingredients:
-              recipe_details['ingredients'].append(ingredient)
-          for method in step.actions:
-              recipe_details['methods'].append(method)
-          if 'utensils' in step.misc:
-              for utensil in step.misc['utensils']:
-                  recipe_details['utensils'].append(utensil)
-          if 'time' in step.misc:
-              recipe_details['times'].append(step.misc['time'])
-          if 'temperature' in step.misc:
-              recipe_details['temperatures'].append(step.misc['temperature'])
-      return recipe_details
+    recipe_details = {}
+    recipe_details['ingredients'] = []
+    recipe_details['methods'] = []
+    recipe_details['utensils'] = []
+    recipe_details['times'] = []
+    recipe_details['temperatures'] = []
+
+    # text field of ingredient is just quantity, unit, name of ingredient
+    for ingr, quantity_unit_dict in ingredients_dict.items():
+        recipe_details['ingredients'].append(f'{quantity_unit_dict["text"]}')
+
+    for step in all_steps:
+        # for ingredient in step.ingredients:
+        #     recipe_details['ingredients'].append(ingredient)
+        for method in step.actions:
+            recipe_details['methods'].append(method)
+        if 'utensils' in step.misc:
+            for utensil in step.misc['utensils']:
+                recipe_details['utensils'].append(utensil)
+        if 'time' in step.misc:
+            recipe_details['times'].append(step.misc['time'])
+        if 'temperature' in step.misc:
+            recipe_details['temperatures'].append(step.misc['temperature'])
+
+    # TODO display in a human-readable format
+    output = "Here are the ingredients you will need:\n"
+    for ingr in recipe_details["ingredients"]:
+        output += "   " + ingr + "\n"
+
+    # output += "\nHere are the tools you will need:\n"
+    # for utensil in recipe_details['utensils']:
+    #     output += utensil + ", "
+
+    return output
+    # return recipe_details
+
 
 # interprets questions and provides a tuple of current step number and answer
 def answer_question(curr_step, prompt, question, last_answer):
@@ -396,11 +443,12 @@ def answer_question(curr_step, prompt, question, last_answer):
             return (curr_step, None)
         words = action.split()
         for word in words:
-            help_url_stem += word + "_" # add underscores between words
+            help_url_stem += word + "_"  # add underscores between words
         return (curr_step, f"Here's a Wikipedia article for you: {help_url_stem}")
 
-    elif prompt == "when is it done": # confused on what 'it' is referring to, last step or time for current step?
-        return (len(all_steps) - 1, f"The recipe is done when you reach this step: {all_steps[len(all_steps) - 1].text}")
+    elif prompt == "when is it done":  # confused on what 'it' is referring to, last step or time for current step?
+        return (
+        len(all_steps) - 1, f"The recipe is done when you reach this step: {all_steps[len(all_steps) - 1].text}")
 
     elif prompt == "what can i substitute for":
         help_url_stem = "https://www.google.com/search?q=what+can+i+substitute+for+"
@@ -412,86 +460,136 @@ def answer_question(curr_step, prompt, question, last_answer):
             help_url_stem += word
         return (curr_step, f"Here's a Google search for you: {help_url_stem}")
     elif prompt == "transform this recipe to":
-      transform_type = question.replace(prompt, "").strip().upper()
-      if transform_type == "VEGETARIAN":
-          for step in all_steps:
-              for i in range(len(step.ingredients)):
-                  random_veg_ing_index = random.randint(0,len(veggie_ingredients)-1)
-                  step.text = step.text.replace(str(step.ingredients[i]), veggie_ingredients[random_veg_ing_index])
-                  step.ingredients[i] = veggie_ingredients[random_veg_ing_index]
-              for i in range(len(step.actions)):
-                  random_veg_method_index = random.randint(0,len(veggie_methods)-1)
-                  step.text = step.text.replace(str(step.actions[i]), veggie_methods[random_veg_method_index])
-                  step.actions[i] = veggie_methods[random_veg_method_index]
-      elif transform_type == "NON-VEGETARIAN":
-          for step in all_steps:
-              for i in range(len(step.ingredients)):
-                  random_non_veg_ing_index = random.randint(0,len(non_veggie_ingredients)-1)
-                  step.text = step.text.replace(str(step.ingredients[i]), non_veggie_ingredients[random_non_veg_ing_index])
-                  step.ingredients[i] = non_veggie_ingredients[random_non_veg_ing_index]
-              for i in range(len(step.actions)):
-                  random_non_veg_method_index = random.randint(0,len(non_veggie_methods)-1)
-                  step.text = step.text.replace(str(step.actions[i]), non_veggie_methods[random_non_veg_method_index])
-                  step.actions[i] = non_veggie_methods[random_non_veg_method_index]
-      elif transform_type == "HEALTHY":
-          for step in all_steps:
-              for i in range(len(step.ingredients)):
-                  random_healthy_ing_index = random.randint(0,len(healthy_ingredients)-1)
-                  step.text = step.text.replace(str(step.ingredients[i]), healthy_ingredients[random_healthy_ing_index])
-                  step.ingredients[i] = healthy_ingredients[random_healthy_ing_index]
-              for i in range(len(step.actions)):
-                  random_healthy_methods_index = random.randint(0,len(healthy_methods)-1)
-                  step.text = step.text.replace(str(step.actions[i]), healthy_methods[random_healthy_methods_index])
-                  step.actions[i] = healthy_methods[random_healthy_methods_index]
-      elif transform_type == "UNHEALTHY":
-          for step in all_steps:
-              for i in range(len(step.ingredients)):
-                  random_unhealthy_ing_index = random.randint(0,len(unhealthy_ingredients)-1)
-                  step.text = step.text.replace(str(step.ingredients[i]), unhealthy_ingredients[random_unhealthy_ing_index])
-                  step.ingredients[i] = unhealthy_ingredients[random_unhealthy_ing_index]
-              for i in range(len(step.actions)):
-                  random_unhealthy_methods_index = random.randint(0,len(unhealthy_methods)-1)
-                  step.text = step.text.replace(str(step.actions[i]), unhealthy_methods[random_unhealthy_methods_index])
-                  step.actions[i] = unhealthy_methods[random_unhealthy_methods_index]
-      elif transform_type == "NORTH INDIAN OR PAKISTANI CUISINE":
-          for step in all_steps:
-              for i in range(len(step.ingredients)):
-                  random_ing_index = random.randint(0,len(pakistani_or_north_indian_cuisine_ingredients)-1)
-                  step.text = step.text.replace(str(step.ingredients[i]), pakistani_or_north_indian_cuisine_ingredients[random_ing_index])
-                  step.ingredients[i] = pakistani_or_north_indian_cuisine_ingredients[random_ing_index]
-              for i in range(len(step.actions)):
-                  random_methods_index = random.randint(0,len(pakistani_or_north_indian_cuisine_methods)-1)
-                  step.text = step.text.replace(str(step.actions[i]), pakistani_or_north_indian_cuisine_methods[random_methods_index])
-                  step.actions[i] = pakistani_or_north_indian_cuisine_methods[random_methods_index]
-      elif transform_type == "DOUBLE AMOUNT":
-        for step in all_steps:
-            for i in range(len(step.ingredients)):
-                step.ingredients[i].amount *= 2
-                step.text = step.text.replace(str(step.ingredients[i]), str(step.ingredients[i]))
-      elif transform_type == "HALF AMOUNT":
-        for step in all_steps:
-            for i in range(len(step.ingredients)):
-                step.ingredients[i].amount /= 2
-                step.text = step.text.replace(str(step.ingredients[i]), str(step.ingredients[i]))
-      elif transform_type == "BAKE TO STIR FRY":
-        for step in all_steps:
-            for i in range(len(step.actions)):
-                if step.actions[i] == "bake":
-                    step.actions[i] = "stir fry"
-                    step.text = step.text.replace("bake", "stir fry")
-      elif transform_type == "GLUTEN AND LACTOSE FREE":
-        for step in all_steps:
-            for i in range(len(step.ingredients)):
-                if step.ingredients[i].name in gluten_and_lactose_free_ingredients:
-                    random_gluten_and_lactose_free_ing_index = random.randint(0,len(gluten_and_lactose_free_ingredients)-1)
-                    step.text = step.text.replace(str(step.ingredients[i]), gluten_and_lactose_free_ingredients[random_gluten_and_lactose_free_ing_index])
-                    step.ingredients[i] = gluten_and_lactose_free_ingredients[random_gluten_and_lactose_free_ing_index]
-      for step in all_steps: 
-          print(step)
-      print(get_recipe_details())
-      return (curr_step, "")
+        transform_type = question.replace(prompt, "").strip().upper()
+        if transform_type == "VEGETARIAN":
+            for step in all_steps:
+                for i in range(len(step.ingredients)):
+                    random_veg_ing_index = random.randint(0, len(veggie_ingredients) - 1)
+                    step.text = step.text.replace(str(step.ingredients[i]), veggie_ingredients[random_veg_ing_index])
+                    step.ingredients[i] = veggie_ingredients[random_veg_ing_index]
+                for i in range(len(step.actions)):
+                    random_veg_method_index = random.randint(0, len(veggie_methods) - 1)
+                    step.text = step.text.replace(str(step.actions[i]), veggie_methods[random_veg_method_index])
+                    step.actions[i] = veggie_methods[random_veg_method_index]
+        elif transform_type == "NON-VEGETARIAN":
+            for step in all_steps:
+                for i in range(len(step.ingredients)):
+                    random_non_veg_ing_index = random.randint(0, len(non_veggie_ingredients) - 1)
+                    step.text = step.text.replace(str(step.ingredients[i]),
+                                                  non_veggie_ingredients[random_non_veg_ing_index])
+                    step.ingredients[i] = non_veggie_ingredients[random_non_veg_ing_index]
+                for i in range(len(step.actions)):
+                    random_non_veg_method_index = random.randint(0, len(non_veggie_methods) - 1)
+                    step.text = step.text.replace(str(step.actions[i]), non_veggie_methods[random_non_veg_method_index])
+                    step.actions[i] = non_veggie_methods[random_non_veg_method_index]
+        elif transform_type == "HEALTHY":
+            for step in all_steps:
+                for i in range(len(step.ingredients)):
+                    random_healthy_ing_index = random.randint(0, len(healthy_ingredients) - 1)
+                    step.text = step.text.replace(str(step.ingredients[i]),
+                                                  healthy_ingredients[random_healthy_ing_index])
+                    step.ingredients[i] = healthy_ingredients[random_healthy_ing_index]
+                for i in range(len(step.actions)):
+                    random_healthy_methods_index = random.randint(0, len(healthy_methods) - 1)
+                    step.text = step.text.replace(str(step.actions[i]), healthy_methods[random_healthy_methods_index])
+                    step.actions[i] = healthy_methods[random_healthy_methods_index]
+        elif transform_type == "UNHEALTHY":
+            for step in all_steps:
+                for i in range(len(step.ingredients)):
+                    random_unhealthy_ing_index = random.randint(0, len(unhealthy_ingredients) - 1)
+                    step.text = step.text.replace(str(step.ingredients[i]),
+                                                  unhealthy_ingredients[random_unhealthy_ing_index])
+                    step.ingredients[i] = unhealthy_ingredients[random_unhealthy_ing_index]
+                for i in range(len(step.actions)):
+                    random_unhealthy_methods_index = random.randint(0, len(unhealthy_methods) - 1)
+                    step.text = step.text.replace(str(step.actions[i]),
+                                                  unhealthy_methods[random_unhealthy_methods_index])
+                    step.actions[i] = unhealthy_methods[random_unhealthy_methods_index]
+        elif transform_type == "NORTH INDIAN OR PAKISTANI CUISINE":
+            for step in all_steps:
+                for i in range(len(step.ingredients)):
+                    random_ing_index = random.randint(0, len(pakistani_or_north_indian_cuisine_ingredients) - 1)
+                    step.text = step.text.replace(str(step.ingredients[i]),
+                                                  pakistani_or_north_indian_cuisine_ingredients[random_ing_index])
+                    step.ingredients[i] = pakistani_or_north_indian_cuisine_ingredients[random_ing_index]
+                for i in range(len(step.actions)):
+                    random_methods_index = random.randint(0, len(pakistani_or_north_indian_cuisine_methods) - 1)
+                    step.text = step.text.replace(str(step.actions[i]),
+                                                  pakistani_or_north_indian_cuisine_methods[random_methods_index])
+                    step.actions[i] = pakistani_or_north_indian_cuisine_methods[random_methods_index]
+        elif transform_type == "DOUBLE":
+            for ingr, quantity_unit_dict in ingredients_dict.items():
+                quantity = unicodedata.normalize("NFKD", quantity_unit_dict['quantity']).split()
+                if len(quantity) == 1:
+                    try:
+                        new_quantity = float(quantity[0]) * 2
+                        ingredients_dict[ingr]["quantity"] = str(new_quantity)
+                        ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+                    except ValueError:
+                        fraction = parse_fraction(quantity[0])
+                        new_quantity = fraction * 2
+                        ingredients_dict[ingr]["quantity"] = str(new_quantity)
+                        ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+                elif len(quantity) == 2:
+                    whole_number = float(quantity[0])
+                    fraction = parse_fraction(quantity[1])
+                    curr_quantity = whole_number + fraction
+                    new_quantity = curr_quantity * 2
+                    ingredients_dict[ingr]["quantity"] = str(new_quantity)
+                    ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+
+        elif transform_type == "HALF":
+            for ingr, quantity_unit_dict in ingredients_dict.items():
+                quantity = unicodedata.normalize("NFKD", quantity_unit_dict['quantity']).split()
+                if len(quantity) == 1:
+                    try:
+                        new_quantity = float(quantity[0]) / 2
+                        ingredients_dict[ingr]["quantity"] = str(new_quantity)
+                        ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+                    except ValueError:
+                        fraction = parse_fraction(quantity[0])
+                        new_quantity = fraction / 2
+                        ingredients_dict[ingr]["quantity"] = str(new_quantity)
+                        ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+                elif len(quantity) == 2:
+                    whole_number = float(quantity[0])
+                    fraction = parse_fraction(quantity[1])
+                    curr_quantity = whole_number + fraction
+                    new_quantity = curr_quantity / 2
+                    ingredients_dict[ingr]["quantity"] = str(new_quantity)
+                    ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+        elif transform_type == "BAKE TO STIR FRY":
+            for step in all_steps:
+                for i in range(len(step.actions)):
+                    if step.actions[i] == "bake":
+                        step.actions[i] = "stir fry"
+                        step.text = step.text.replace("bake", "stir fry")
+        elif transform_type == "GLUTEN AND LACTOSE FREE":
+            for step in all_steps:
+                for i in range(len(step.ingredients)):
+                    if step.ingredients[i].name in gluten_and_lactose_free_ingredients:
+                        random_gluten_and_lactose_free_ing_index = random.randint(0,
+                                                                                  len(gluten_and_lactose_free_ingredients) - 1)
+                        step.text = step.text.replace(str(step.ingredients[i]), gluten_and_lactose_free_ingredients[
+                            random_gluten_and_lactose_free_ing_index])
+                        step.ingredients[i] = gluten_and_lactose_free_ingredients[
+                            random_gluten_and_lactose_free_ing_index]
+        # for step in all_steps:
+        #     print(step)
+
+        print(get_recipe_details())
+        return (curr_step, "")
     else:
         return (curr_step, None)
+
+
+def parse_fraction(fraction_str):
+    pattern = r'(\d+)[^\d](\d+)'
+    fraction_str = re.match(pattern, fraction_str)
+    numerator = fraction_str.group(1)
+    denominator = fraction_str.group(2)
+    fraction = float(numerator) / float(denominator)
+    return fraction
 
 
 """
@@ -505,11 +603,12 @@ def chat_with_user():
     recipe_url = input("Hi, I'm Alex! Please enter a recipe URL. ").strip()  # most basic name ever 💀
     while not valid_url:
         valid_url = True
-        try:
-            setup(recipe_url)  # you'll have to input https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/ when prompted for debugging
-        except:
-            valid_url = False
-            recipe_url = input("Please enter a valid URL. ")
+        # try:
+        setup(
+            recipe_url)  # you'll have to input https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/ when prompted for debugging
+        # except:
+        #     valid_url = False
+        #     recipe_url = input("Please enter a valid URL. ")
 
     curr_step = 0
     answer = ""
@@ -533,6 +632,7 @@ def chat_with_user():
         last_ans = answer
         prompt_in_Q = False
 
+
 chat_with_user()
 ''' Original dependency parsing code below: '''
 # token_by_part_of_speech = {}
@@ -554,4 +654,4 @@ chat_with_user()
 
 # print(token_by_part_of_speech)
 # print(token_by_part_of_speech.keys())
-#https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/
+# https://www.bhg.com/recipes/how-to/bake/how-to-make-cupcakes/
