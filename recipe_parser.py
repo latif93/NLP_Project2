@@ -577,7 +577,7 @@ def answer_question(curr_step, prompt, question, last_answer):
         # for step in all_steps:
         #     print(step)
 
-        print(get_recipe_details())
+        #print(get_recipe_details())
         return (curr_step, "")
     else:
         return (curr_step, None)
