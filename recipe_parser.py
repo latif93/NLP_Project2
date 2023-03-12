@@ -197,6 +197,18 @@ pakistani_or_north_indian_cuisine_methods = ['chop', 'grate', 'mince', 'peel', '
                                              'cook on a hot plate (plancha)', 'cook in a large pot (degh)', 
                                              'cook in a double boiler (kund)']
 
+gluten_and_lactose_free_ingredients = ["Kale", "Collard greens", "Spinach", "Chard", "Cabbage", "Broccoli",
+                                        "Red or green leaf lettuce", "Cauliflower", "Green beans", "Asparagus", 
+                                        "Eggplant", "Sweet potatoes or yams", "Potatoes (all varieties)", "Carrots", 
+                                        "Beets", "Acorn Squash", "Butternut Squash", "Zucchini", "Delicata Squash", 
+                                        "Spaghetti Squash", "Tomatoes", "Eggplant", "Kabocha Squash", "Pumpkin", 
+                                        "Onions", "Garlic", "Shallots", "Leeks", "Mushrooms", "Peppers", "Avocado",
+                                        "White rice", "Brown rice", "Jasmine rice", "Wild rice", "Arborio rice", 
+                                        "Quinoa", "Kasha (buckwheat)", 
+                                        "Quick-cooking, steel cut, or rolled old fashioned oats (choose “gluten-free” oats)", 
+                                        "Amaranth", "Teff", "Millet", "Popcorn", "Sorghum"]
+
+
 # For a given step, find out ingredients and tools used for it
 def extract_items(parts_of_speech):
     ingredients = []
@@ -451,6 +463,29 @@ def answer_question(curr_step, prompt, question, last_answer):
                   random_methods_index = random.randint(0,len(pakistani_or_north_indian_cuisine_methods)-1)
                   step.text = step.text.replace(str(step.actions[i]), pakistani_or_north_indian_cuisine_methods[random_methods_index])
                   step.actions[i] = pakistani_or_north_indian_cuisine_methods[random_methods_index]
+      elif transform_type == "DOUBLE AMOUNT":
+        for step in all_steps:
+            for i in range(len(step.ingredients)):
+                step.ingredients[i].amount *= 2
+                step.text = step.text.replace(str(step.ingredients[i]), str(step.ingredients[i]))
+      elif transform_type == "HALF AMOUNT":
+        for step in all_steps:
+            for i in range(len(step.ingredients)):
+                step.ingredients[i].amount /= 2
+                step.text = step.text.replace(str(step.ingredients[i]), str(step.ingredients[i]))
+      elif transform_type == "BAKE TO STIR FRY":
+        for step in all_steps:
+            for i in range(len(step.actions)):
+                if step.actions[i] == "bake":
+                    step.actions[i] = "stir fry"
+                    step.text = step.text.replace("bake", "stir fry")
+      elif transform_type == "GLUTEN AND LACTOSE FREE":
+        for step in all_steps:
+            for i in range(len(step.ingredients)):
+                if step.ingredients[i].name in gluten_and_lactose_free_ingredients:
+                    random_gluten_and_lactose_free_ing_index = random.randint(0,len(gluten_and_lactose_free_ingredients)-1)
+                    step.text = step.text.replace(str(step.ingredients[i]), gluten_and_lactose_free_ingredients[random_gluten_and_lactose_free_ing_index])
+                    step.ingredients[i] = gluten_and_lactose_free_ingredients[random_gluten_and_lactose_free_ing_index]
       for step in all_steps: 
           print(step)
       print(get_recipe_details())
