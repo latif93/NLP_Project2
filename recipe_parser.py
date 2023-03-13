@@ -460,6 +460,7 @@ def answer_question(curr_step, prompt, question, last_answer):
             help_url_stem += word
         return (curr_step, f"Here's a Google search for you: {help_url_stem}")
     elif prompt == "transform this recipe to":
+        is_detail_required = False
         transform_type = question.replace(prompt, "").strip().upper()
         if transform_type == "VEGETARIAN":
             for step in all_steps:
@@ -537,6 +538,7 @@ def answer_question(curr_step, prompt, question, last_answer):
                     new_quantity = curr_quantity * 2
                     ingredients_dict[ingr]["quantity"] = str(new_quantity)
                     ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+            is_detail_required = True  
 
         elif transform_type == "HALF":
             for ingr, quantity_unit_dict in ingredients_dict.items():
@@ -558,16 +560,17 @@ def answer_question(curr_step, prompt, question, last_answer):
                     new_quantity = curr_quantity / 2
                     ingredients_dict[ingr]["quantity"] = str(new_quantity)
                     ingredients_dict[ingr]["text"] = f'{new_quantity} {quantity_unit_dict["unit"]} {ingr}'
+            is_detail_required = True  
         elif transform_type == "BAKE TO STIR FRY":
             for step in all_steps:
                 for i in range(len(step.actions)):
-                    if step.actions[i] == "bake":
+                    if str(step.actions[i]) == "bake":
                         step.actions[i] = "stir fry"
                         step.text = step.text.replace("bake", "stir fry")
         elif transform_type == "GLUTEN AND LACTOSE FREE":
             for step in all_steps:
                 for i in range(len(step.ingredients)):
-                    if step.ingredients[i].name in gluten_and_lactose_free_ingredients:
+                    if str(step.ingredients[i]) in gluten_and_lactose_free_ingredients:
                         random_gluten_and_lactose_free_ing_index = random.randint(0,
                                                                                   len(gluten_and_lactose_free_ingredients) - 1)
                         step.text = step.text.replace(str(step.ingredients[i]), gluten_and_lactose_free_ingredients[
@@ -576,8 +579,8 @@ def answer_question(curr_step, prompt, question, last_answer):
                             random_gluten_and_lactose_free_ing_index]
         # for step in all_steps:
         #     print(step)
-
-        #print(get_recipe_details())
+        if is_detail_required:
+            print(get_recipe_details())
         return (curr_step, "")
     else:
         return (curr_step, None)
