@@ -10,4 +10,6 @@ Ingredient substitution questions ("What can I substitute for <ingredient>?");
 Name your bot :)
 
 
-We cover all basic goals, including failure states for all basic goals and questions, by taking in a recipe and breaking that text up into actions, ingredients, and misc objects stored in a dictionary, which we then call to and retrieve relevant words from when answering the user's question. We used beautifulsoup for web scraping and spaCy's en_core_web_sm as our dependency parser.
+We cover all basic goals, including failure states for all basic goals and questions, by taking in a recipe and breaking that text up into actions, ingredients, and misc objects stored in a dictionary, which we then call to and retrieve relevant words from when answering the user's question. We used beautifulsoup for web scraping and spaCy's en_core_web_sm as our dependency parser. We also use requests.
+
+Refer to our demo video to see that all of our transformations work: vegetarian, non-vegetarian, healthy, unhealthy, north indian or pakistani cuisine, gluten and lactose free, half, double, bake to stir fry.
